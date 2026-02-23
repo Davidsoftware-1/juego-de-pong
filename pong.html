@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pong - Edición Arcade 2000</title>
+<link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet">
+<style>
+  /* =========================================
+     ESTILOS Y VIBRA Y2K / DREAMCAST
+  ========================================= */
+  body {
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(circle at center, #1a1a3a 0%, #050510 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: 'Michroma', sans-serif;
+    overflow: hidden;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    letter-spacing: 4px;
+    color: #00e5ff;
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    margin-bottom: 10px;
+  }
+
+  canvas {
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(0, 137, 255, 0.2), 
+                inset 0 0 20px rgba(0, 0, 0, 0.8);
+  }
+
+  .controles {
+    margin-top: 15px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>VIRTUAL PONG</h1>
+<canvas id="gameCanvas" width="800" height="500"></canvas>
+<div class="controles">USA LAS FLECHAS ARRIBA / ABAJO PARA MOVERTE</div>
+
+<script>
+  /* =========================================
+     CONFIGURACIÓN DEL JUEGO
+  ========================================= */
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // Ajustes de dificultad relajada
+  const VELOCIDAD_INICIAL_PELOTA = 4.5;
+  const VELOCIDAD_IA = 3.2; // Más lenta que la pelota para que puedas ganarle
+
+  // Objetos del juego
+  const pad = { w: 12, h: 90, vel: 7 };
+  
+  const jugador = { 
+    x: 30, 
+    y: canvas.height / 2 - pad.h / 2, 
+    puntos: 0, 
+    dy: 0 
+  };
+  
+  const maquina = { 
+    x: canvas.width - 30 - pad.w, 
+    y: canvas.height / 2 - pad.h / 2, 
+    puntos: 0 
+  };
+  
+  const pelota = { 
+    x: canvas.width / 2, 
+    y: canvas.height / 2, 
+    radio: 8, 
+    dx: VELOCIDAD_INICIAL_PELOTA, 
+    dy: 3 
+  };
+
+  // Estela de la pelota para el efecto visual
+  const estela = [];
+
+  /* =========================================
+     CONTROLES DEL JUGADOR
+  ========================================= */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") jugador.dy = -pad.vel;
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") jugador.dy = pad.vel;
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || 
+        e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+      jugador.dy = 0;
+    }
+  });
+
+  /* =========================================
+     LÓGICA DEL JUEGO
+  ========================================= */
+  function resetPelota(haciaJugador) {
+    pelota.x = canvas.width / 2;
+    pelota.y = canvas.height / 2;
+    // Lanzar hacia quien perdió el punto
+    pelota.dx = haciaJugador ? VELOCIDAD_INICIAL_PELOTA : -VELOCIDAD_INICIAL_PELOTA;
+    pelota.dy = (Math.random() * 4) - 2; // Ángulo aleatorio leve
+    estela.length = 0; // Limpiar estela
+  }
+
+  function actualizar() {
+    // 1. Movimiento del Jugador con límites
+    jugador.y += jugador.dy;
+    if (jugador.y < 10) jugador.y = 10;
+    if (jugador.y + pad.h > canvas.height - 10) jugador.y = canvas.height - pad.h - 10;
+
+    // 2. Movimiento de la Máquina (IA relajada)
+    let centroMaquina = maquina.y + pad.h / 2;
+    if (centroMaquina < pelota.y - 15) maquina.y += VELOCIDAD_IA;
+    if (centroMaquina > pelota.y + 15) maquina.y -= VELOCIDAD_IA;
+    
+    // Límites de la máquina
+    if (maquina.y < 10) maquina.y = 10;
+    if (maquina.y + pad.h > canvas.height - 10) maquina.y = canvas.height - pad.h - 10;
+
+    // Guardar posición para la estela antes de mover la pelota
+    estela.push({ x: pelota.x, y: pelota.y });
+    if (estela.length > 12) estela.shift(); // Mantener solo las últimas 12 posiciones
+
+    // 3. Mover Pelota
+    pelota.x += pelota.dx;
+    pelota.y += pelota.dy;
+
+    // 4. Rebotes en techo y suelo
+    if (pelota.y - pelota.radio < 0 || pelota.y + pelota.radio > canvas.height) {
+      pelota.dy *= -1;
+    }
+
+    // 5. Colisiones seguras con las paletas
+    let colisionJugador = (pelota.x - pelota.radio < jugador.x + pad.w && 
+                           pelota.y > jugador.y && pelota.y < jugador.y + pad.h);
+                           
+    let colisionMaquina = (pelota.x + pelota.radio > maquina.x && 
+                           pelota.y > maquina.y && pelota.y < maquina.y + pad.h);
+
+    if (colisionJugador) {
+      pelota.x = jugador.x + pad.w + pelota.radio; // Evita que se quede atascada
+      pelota.dx *= -1;
+      pelota.dx += 0.2; // Aceleración muy ligera
+      pelota.dy = ((pelota.y - (jugador.y + pad.h / 2)) / (pad.h / 2)) * 5; // Da efecto según donde golpees
+    } 
+    else if (colisionMaquina) {
+      pelota.x = maquina.x - pelota.radio;
+      pelota.dx *= -1;
+      pelota.dx -= 0.2;
+      pelota.dy = ((pelota.y - (maquina.y + pad.h / 2)) / (pad.h / 2)) * 5;
+    }
+
+    // 6. Puntuación
+    if (pelota.x < 0) {
+      maquina.puntos++;
+      resetPelota(true);
+    } else if (pelota.x > canvas.width) {
+      jugador.puntos++;
+      resetPelota(false);
+    }
+  }
+
+  /* =========================================
+     MOTOR GRÁFICO (DIBUJO)
+  ========================================= */
+  function dibujarPaleta(x, y, color1, color2) {
+    let gradiente = ctx.createLinearGradient(x, y, x + pad.w, y);
+    gradiente.addColorStop(0, color1);
+    gradiente.addColorStop(1, color2);
+    
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = color1;
+    ctx.fillStyle = gradiente;
+    // Borde redondeado para estética 2000s
+    ctx.beginPath();
+    ctx.roundRect(x, y, pad.w, pad.h, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0; // Resetear sombra
+  }
+
+  function dibujar() {
+    // Limpiar pantalla
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Dibujar red central (estilo neón sutil)
+    ctx.strokeStyle = "rgba(0, 229, 255, 0.15)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([15, 15]);
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]); // Resetear
+
+    // Dibujar marcadores
+    ctx.font = "bold 80px 'Michroma', sans-serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.textAlign = "center";
+    ctx.fillText(jugador.puntos, canvas.width / 4, 100);
+    ctx.fillText(maquina.puntos, (canvas.width / 4) * 3, 100);
+
+    // Dibujar Paletas (Jugador: Azul, Máquina: Naranja)
+    dibujarPaleta(jugador.x, jugador.y, "#0089FF", "#00e5ff");
+    dibujarPaleta(maquina.x, maquina.y, "#FF4500", "#FF8C00");
+
+    // Dibujar Estela de la pelota
+    estela.forEach((pos, index) => {
+      let alpha = index / estela.length; // Se desvanece
+      ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.4})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, pelota.radio * (alpha * 0.8), 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Dibujar Pelota principal
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "#fff";
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(pelota.x, pelota.y, pelota.radio, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  /* =========================================
+     BUCLE PRINCIPAL
+  ========================================= */
+  function loop() {
+    actualizar();
+    dibujar();
+    requestAnimationFrame(loop);
+  }
+
+  // Iniciar
+  resetPelota(true);
+  loop();
+</script>
+</body>
+</html>
